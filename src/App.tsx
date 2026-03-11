@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { TradingAlert, AssetCategory } from './types';
 
 // TradingView Widget Component
-const TradingViewChart = ({ symbol }: { symbol: string }) => {
+const TradingViewChart = ({ symbol, chartLayoutId }: { symbol: string, chartLayoutId?: string }) => {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ const TradingViewChart = ({ symbol }: { symbol: string }) => {
     script.onload = () => {
       const tv = (window as any).TradingView;
       if (tv) {
-        new tv.widget({
+        const config: any = {
           autosize: true,
           symbol: symbol,
           interval: 'D',
@@ -45,11 +45,17 @@ const TradingViewChart = ({ symbol }: { symbol: string }) => {
           allow_symbol_change: true,
           container_id: 'tradingview_widget',
           hide_side_toolbar: false,
-        });
+        };
+        
+        if (chartLayoutId) {
+          config.saved_chart = chartLayoutId;
+        }
+
+        new tv.widget(config);
       }
     };
     document.head.appendChild(script);
-  }, [symbol]);
+  }, [symbol, chartLayoutId]);
 
   return (
     <div className="w-full h-full bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
@@ -64,6 +70,8 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState<AssetCategory | 'ALL'>('ALL');
   const [trafficLogs, setTrafficLogs] = useState<any[]>([]);
   const [showTraffic, setShowTraffic] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [chartLayoutId, setChartLayoutId] = useState<string>(localStorage.getItem('tv_chart_id') || '');
   const [lastTrafficTime, setLastTrafficTime] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [serverId, setServerId] = useState<string | null>(null);
@@ -181,7 +189,11 @@ export default function App() {
           </button>
         </nav>
         <div className="mt-auto">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400">
+          <button 
+            onClick={() => setShowSettings(true)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400"
+            title="Settings"
+          >
             <Settings className="w-5 h-5" />
           </button>
         </div>
@@ -366,7 +378,10 @@ export default function App() {
                   <Bell className="w-4 h-4" />
                   Send Test Alert
                 </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-xs font-semibold transition-all border border-gray-200 shadow-sm text-gray-700">
+                <button 
+                  onClick={() => window.open(`https://www.tradingview.com/chart/?symbol=${selectedSymbol}`, '_blank')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-xs font-semibold transition-all border border-gray-200 shadow-sm text-gray-700"
+                >
                   <ExternalLink className="w-4 h-4" />
                   Open in TradingView
                 </button>
@@ -374,7 +389,7 @@ export default function App() {
             </div>
             
             <div className="flex-1 min-h-0">
-              <TradingViewChart symbol={selectedSymbol} />
+              <TradingViewChart symbol={selectedSymbol} chartLayoutId={chartLayoutId} />
             </div>
 
             {/* Strategy Notes / Alert Details */}
@@ -565,6 +580,71 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Settings Modal */}
+        <AnimatePresence>
+          {showSettings && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+              onClick={() => setShowSettings(false)}
+            >
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-100"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-emerald-600" />
+                    App Settings
+                  </h2>
+                  <button 
+                    onClick={() => setShowSettings(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      TradingView Chart Layout ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={chartLayoutId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setChartLayoutId(val);
+                        localStorage.setItem('tv_chart_id', val);
+                      }}
+                      placeholder="e.g., abcdefgh"
+                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono text-sm"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                      To see your custom drawings, enter your saved chart ID. You can find this in the URL of your TradingView chart (e.g., tradingview.com/chart/<strong>ID_HERE</strong>/).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-8 flex justify-end">
+                  <button 
+                    onClick={() => setShowSettings(false)}
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors shadow-sm"
+                  >
+                    Save & Close
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

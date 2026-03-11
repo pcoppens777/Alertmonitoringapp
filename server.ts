@@ -174,11 +174,26 @@ async function startServer() {
             price: parts[3]?.trim() || '0'
           };
         } else {
-          // Last resort: Just treat the whole thing as a message
+          // Last resort: Try to extract symbol from the beginning of the message
+          // e.g., "BTCUSD, 1 Crossing Trend Line" -> symbol: "BTCUSD"
+          let extractedSymbol = 'ALERT';
+          let extractedMessage = rawBody;
+          
+          const firstCommaIndex = rawBody.indexOf(',');
+          const firstSpaceIndex = rawBody.indexOf(' ');
+          
+          if (firstCommaIndex > 0 && firstCommaIndex < 15) {
+            extractedSymbol = rawBody.substring(0, firstCommaIndex).trim();
+            extractedMessage = rawBody.substring(firstCommaIndex + 1).trim();
+          } else if (firstSpaceIndex > 0 && firstSpaceIndex < 15) {
+            extractedSymbol = rawBody.substring(0, firstSpaceIndex).trim();
+            extractedMessage = rawBody.substring(firstSpaceIndex + 1).trim();
+          }
+
           data = {
-            symbol: 'ALERT',
+            symbol: extractedSymbol,
             category: 'SIGNAL',
-            message: rawBody
+            message: extractedMessage
           };
         }
       }
