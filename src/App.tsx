@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { TradingAlert, AssetCategory, ChartLayout } from './types';
 
 // TradingView Widget Component
-const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayouts?: ChartLayout[] }) => {
+const TradingViewChart = ({ symbol, chartLayouts, interval }: { symbol: string, chartLayouts?: ChartLayout[], interval?: string | null }) => {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayou
         const config: any = {
           autosize: true,
           symbol: symbol,
-          interval: 'D',
+          interval: interval || 'D', // Default interval, overridden by layout if not provided by alert
           timezone: 'Etc/UTC',
           theme: 'light',
           style: '1',
@@ -49,6 +49,7 @@ const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayou
         
         // Find matching layout for the current symbol
         let matchedLayoutId = '';
+        let matchedInterval = '';
         if (chartLayouts && chartLayouts.length > 0) {
           // First try to find an exact match or partial match in symbols list
           const match = chartLayouts.find(layout => {
@@ -63,11 +64,13 @@ const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayou
           
           if (match) {
             matchedLayoutId = match.id;
+            if (match.interval) matchedInterval = match.interval;
           } else {
             // Fallback to a default layout (one with '*' or just the first one if it has no specific symbols)
             const defaultLayout = chartLayouts.find(l => l.symbols.includes('*') || !l.symbols.trim());
             if (defaultLayout) {
               matchedLayoutId = defaultLayout.id;
+              if (defaultLayout.interval) matchedInterval = defaultLayout.interval;
             }
           }
         }
@@ -75,12 +78,19 @@ const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayou
         if (matchedLayoutId) {
           config.saved_chart = matchedLayoutId;
         }
+        
+        // If alert provided an interval, use it. Otherwise use the layout's mapped interval.
+        if (interval) {
+          config.interval = interval;
+        } else if (matchedInterval) {
+          config.interval = matchedInterval;
+        }
 
         new tv.widget(config);
       }
     };
     document.head.appendChild(script);
-  }, [symbol, chartLayouts]);
+  }, [symbol, chartLayouts, interval]);
 
   return (
     <div className="w-full h-full bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
@@ -92,6 +102,7 @@ const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayou
 export default function App() {
   const [alerts, setAlerts] = useState<TradingAlert[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string>('NASDAQ:AAPL');
+  const [selectedInterval, setSelectedInterval] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<AssetCategory | 'ALL'>('ALL');
   const [trafficLogs, setTrafficLogs] = useState<any[]>([]);
   const [showTraffic, setShowTraffic] = useState(false);
@@ -181,8 +192,11 @@ export default function App() {
     socket.on('new_alert', (alert: TradingAlert) => {
       console.log('>>> Socket: New alert received!', alert);
       setAlerts(prev => [alert, ...prev].slice(0, 100));
-      // Auto-select the latest alert's symbol
+      // Auto-select the latest alert's symbol and interval
       setSelectedSymbol(alert.symbol);
+      if (alert.interval) {
+        setSelectedInterval(alert.interval);
+      }
     });
 
     socket.on('webhook_traffic', (data: any) => {
@@ -352,13 +366,27 @@ export default function App() {
                       key={alert.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      onClick={() => setSelectedSymbol(alert.symbol)}
+                      onClick={() => {
+                        setSelectedSymbol(alert.symbol);
+                        if (alert.interval) {
+                          setSelectedInterval(alert.interval);
+                        } else {
+                          setSelectedInterval(null);
+                        }
+                      }}
                       className={`data-row group border-b border-gray-100 ${selectedSymbol === alert.symbol ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
                     >
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold tracking-tight text-gray-900 group-hover:text-emerald-600 transition-colors">
-                          {alert.symbol}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold tracking-tight text-gray-900 group-hover:text-emerald-600 transition-colors">
+                            {alert.symbol}
+                          </span>
+                          {alert.interval && (
+                            <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded text-[9px] font-bold">
+                              {alert.interval}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
                           {alert.category}
                         </span>
@@ -405,7 +433,7 @@ export default function App() {
                       const res = await fetch('/api/webhook', {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain' },
-                        body: `${selectedSymbol}|RESEARCH|Manual Test Alert|${(Math.random() * 1000).toFixed(2)}`
+                        body: `${selectedSymbol}|RESEARCH|Manual Test Alert|${(Math.random() * 1000).toFixed(2)}|15`
                       });
                       if (res.ok) {
                         console.log('Test alert sent');
@@ -430,7 +458,7 @@ export default function App() {
             </div>
             
             <div className="flex-1 min-h-0">
-              <TradingViewChart symbol={selectedSymbol} chartLayouts={chartLayouts} />
+              <TradingViewChart symbol={selectedSymbol} chartLayouts={chartLayouts} interval={selectedInterval} />
             </div>
 
             {/* Strategy Notes / Alert Details */}
@@ -502,7 +530,10 @@ export default function App() {
                         ✓ MUST use the "ais-pre" (Shared) URL above.
                       </p>
                       <p className="text-[9px] text-emerald-600 font-medium">
-                        ✓ TradingView cannot see the "ais-dev" URL.
+                        ✓ JSON: Add <strong>"interval": "{`{{interval}}`}"</strong> to auto-load the correct timeframe.
+                      </p>
+                      <p className="text-[9px] text-emerald-600 font-medium">
+                        ✓ Plain Text: Use <strong>{`{{ticker}}|SIGNAL|{{strategy.order.action}}|{{close}}|{{interval}}`}</strong>
                       </p>
                     </div>
                   </div>
@@ -660,6 +691,11 @@ export default function App() {
                     Map your TradingView Chart Layout IDs to specific symbols. When an alert arrives, the app will automatically load the correct layout. Use <strong>*</strong> as a wildcard for a default layout.
                   </p>
 
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
+                    <p className="font-semibold mb-1">Important: TradingView Layout Sharing</p>
+                    <p>For your drawings to appear here, you must enable <strong>Sharing</strong> on your chart layout in TradingView. Click the dropdown arrow next to your layout name in TradingView and turn on "Sharing".</p>
+                  </div>
+
                   <div className="space-y-4">
                     {chartLayouts.map((layout, index) => (
                       <div key={index} className="p-4 border border-gray-200 rounded-xl bg-gray-50 flex flex-col gap-3 relative">
@@ -674,8 +710,8 @@ export default function App() {
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                         
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
+                        <div className="grid grid-cols-12 gap-4">
+                          <div className="col-span-12 sm:col-span-5">
                             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Layout Name</label>
                             <input 
                               type="text" 
@@ -690,7 +726,7 @@ export default function App() {
                               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm"
                             />
                           </div>
-                          <div>
+                          <div className="col-span-8 sm:col-span-5">
                             <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Layout ID</label>
                             <input 
                               type="text" 
@@ -702,6 +738,21 @@ export default function App() {
                                 localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
                               }}
                               placeholder="e.g., abcdefgh"
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono text-sm"
+                            />
+                          </div>
+                          <div className="col-span-4 sm:col-span-2">
+                            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Interval</label>
+                            <input 
+                              type="text" 
+                              value={layout.interval || ''}
+                              onChange={(e) => {
+                                const newLayouts = [...chartLayouts];
+                                newLayouts[index].interval = e.target.value;
+                                setChartLayouts(newLayouts);
+                                localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
+                              }}
+                              placeholder="e.g., 1, 60, D"
                               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono text-sm"
                             />
                           </div>

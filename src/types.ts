@@ -12,6 +12,7 @@ export interface ChartLayout {
   id: string;
   name: string;
   symbols: string;
+  interval?: string;
 }
 
 export interface TradingAlert {

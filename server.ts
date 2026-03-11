@@ -50,7 +50,8 @@ db.exec(`
     message TEXT,
     price REAL,
     timestamp INTEGER NOT NULL,
-    imageUrl TEXT
+    imageUrl TEXT,
+    interval TEXT
   );
   CREATE TABLE IF NOT EXISTS traffic (
     id TEXT PRIMARY KEY,
@@ -67,6 +68,13 @@ db.exec(`
     data TEXT
   );
 `);
+
+// Migration: Add interval column if it doesn't exist
+try {
+  db.exec(`ALTER TABLE alerts ADD COLUMN interval TEXT`);
+} catch (e) {
+  // Column already exists
+}
 
 const SERVER_ID = 'V3-' + uuidv4().slice(0, 6);
 
@@ -164,14 +172,15 @@ async function startServer() {
         // Try JSON first
         data = JSON.parse(rawBody);
       } catch (e) {
-        // Try Pipe format: SYMBOL|CATEGORY|MESSAGE|PRICE
+        // Try Pipe format: SYMBOL|CATEGORY|MESSAGE|PRICE|INTERVAL
         if (rawBody.includes('|')) {
           const parts = rawBody.split('|');
           data = {
             symbol: parts[0]?.trim() || 'ALERT',
             category: parts[1]?.trim() || 'SIGNAL',
             message: parts[2]?.trim() || rawBody,
-            price: parts[3]?.trim() || '0'
+            price: parts[3]?.trim() || '0',
+            interval: parts[4]?.trim() || null
           };
         } else {
           // Last resort: Try to extract symbol from the beginning of the message
@@ -208,7 +217,7 @@ async function startServer() {
       };
     }
 
-    let { symbol, category, message, price, imageUrl } = data;
+    let { symbol, category, message, price, imageUrl, interval } = data;
     
     // Default values if missing
     symbol = (symbol || 'ALERT').toString().toUpperCase();
@@ -221,15 +230,16 @@ async function startServer() {
       message: (message || '').toString(),
       price: parseFloat(price) || 0,
       timestamp: Date.now(),
-      imageUrl: imageUrl || null
+      imageUrl: imageUrl || null,
+      interval: interval ? interval.toString() : null
     };
 
     try {
       const insert = db.prepare(`
-        INSERT INTO alerts (id, symbol, category, message, price, timestamp, imageUrl)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO alerts (id, symbol, category, message, price, timestamp, imageUrl, interval)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      insert.run(alert.id, alert.symbol, alert.category, alert.message, alert.price, alert.timestamp, alert.imageUrl);
+      insert.run(alert.id, alert.symbol, alert.category, alert.message, alert.price, alert.timestamp, alert.imageUrl, alert.interval);
       
       console.log('>>> Alert Saved:', alert.symbol);
       io.emit('new_alert', alert);
