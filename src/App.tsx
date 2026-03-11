@@ -76,10 +76,6 @@ const TradingViewChart = ({ symbol, chartLayouts, interval }: { symbol: string, 
           }
         }
 
-        if (matchedLayoutId) {
-          config.chart = matchedLayoutId;
-        }
-        
         // If alert provided an interval, use it. Otherwise use the layout's mapped interval.
         if (interval) {
           config.interval = interval;
@@ -488,7 +484,30 @@ export default function App() {
                   Send Test Alert
                 </button>
                 <button 
-                  onClick={() => window.open(`https://www.tradingview.com/chart/?symbol=${selectedSymbol}`, '_blank')}
+                  onClick={() => {
+                    let matchedLayoutId = '';
+                    if (chartLayouts && chartLayouts.length > 0) {
+                      const match = chartLayouts.find(layout => {
+                        if (!layout.symbols || !layout.id) return false;
+                        const symbolsList = layout.symbols.split(',')
+                          .map(s => s.trim().toUpperCase())
+                          .filter(s => s.length > 0 && s !== '*');
+                        return symbolsList.includes(selectedSymbol.toUpperCase()) || symbolsList.some(s => selectedSymbol.toUpperCase().includes(s));
+                      });
+                      if (match) {
+                        matchedLayoutId = match.id;
+                      } else {
+                        const defaultLayout = chartLayouts.find(l => l.symbols.includes('*') || !l.symbols.trim());
+                        if (defaultLayout) {
+                          matchedLayoutId = defaultLayout.id;
+                        }
+                      }
+                    }
+                    const url = matchedLayoutId 
+                      ? `https://www.tradingview.com/chart/${matchedLayoutId}/?symbol=${selectedSymbol}`
+                      : `https://www.tradingview.com/chart/?symbol=${selectedSymbol}`;
+                    window.open(url, '_blank');
+                  }}
                   className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 rounded-lg text-xs font-semibold transition-all border border-gray-200 shadow-sm text-gray-700"
                 >
                   <ExternalLink className="w-4 h-4" />
