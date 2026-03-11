@@ -1,0 +1,5 @@
+{
+  "name": "TradingView Alert Monitor",
+  "description": "Real-time dashboard for TradingView alerts with categorized asset monitoring and live chart views.",
+  "requestFramePermissions": []
+}
