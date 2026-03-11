@@ -276,6 +276,27 @@ async function startServer() {
     res.json(alerts);
   });
 
+  app.delete('/api/alerts/:id', (req, res) => {
+    try {
+      const stmt = db.prepare('DELETE FROM alerts WHERE id = ?');
+      stmt.run(req.params.id);
+      res.json({ status: 'success' });
+    } catch (error) {
+      console.error('Failed to delete alert:', error);
+      res.status(500).json({ error: 'Failed to delete alert' });
+    }
+  });
+
+  app.delete('/api/alerts', (req, res) => {
+    try {
+      db.prepare('DELETE FROM alerts').run();
+      res.json({ status: 'success' });
+    } catch (error) {
+      console.error('Failed to clear alerts:', error);
+      res.status(500).json({ error: 'Failed to clear alerts' });
+    }
+  });
+
   // Catch-all for API to find misdirected TradingView hits (Moved to end of API routes)
   app.all('/api/*', (req, res) => {
     console.log(`!!! UNHANDLED API CALL: ${req.method} ${req.path}`);

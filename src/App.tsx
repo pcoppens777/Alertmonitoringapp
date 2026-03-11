@@ -11,7 +11,8 @@ import {
   ExternalLink,
   Settings,
   LayoutDashboard,
-  Send
+  Send,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TradingAlert, AssetCategory, ChartLayout } from './types';
@@ -222,6 +223,30 @@ export default function App() {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
+  const handleDeleteAlert = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/alerts/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setAlerts(prev => prev.filter(a => a.id !== id));
+      }
+    } catch (err) {
+      console.error('Failed to delete alert', err);
+    }
+  };
+
+  const handleClearAllAlerts = async () => {
+    if (!confirm('Are you sure you want to delete all alerts?')) return;
+    try {
+      const res = await fetch('/api/alerts', { method: 'DELETE' });
+      if (res.ok) {
+        setAlerts([]);
+      }
+    } catch (err) {
+      console.error('Failed to clear alerts', err);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-[#f8f9fa] text-gray-900 overflow-hidden">
       {/* Sidebar Navigation */}
@@ -350,6 +375,14 @@ export default function App() {
                 >
                   Refresh
                 </button>
+                {alerts.length > 0 && (
+                  <button 
+                    onClick={handleClearAllAlerts}
+                    className="text-[9px] text-red-500 hover:text-red-600 font-bold uppercase"
+                  >
+                    Clear All
+                  </button>
+                )}
               </div>
               <span className="text-[10px] font-bold text-gray-400">{filteredAlerts.length} Alerts</span>
             </div>
@@ -374,7 +407,7 @@ export default function App() {
                           setSelectedInterval(null);
                         }
                       }}
-                      className={`data-row group border-b border-gray-100 ${selectedSymbol === alert.symbol ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+                      className={`data-row group border-b border-gray-100 relative ${selectedSymbol === alert.symbol ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
                     >
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
@@ -405,6 +438,13 @@ export default function App() {
                         <span className="text-[10px] text-gray-400 font-mono">
                           {formatTime(alert.timestamp)}
                         </span>
+                        <button 
+                          onClick={(e) => handleDeleteAlert(e, alert.id)}
+                          className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                          title="Delete Alert"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                         <ChevronRight className={`w-4 h-4 transition-transform ${selectedSymbol === alert.symbol ? 'text-emerald-600 translate-x-1' : 'text-gray-300'}`} />
                       </div>
                     </motion.div>
