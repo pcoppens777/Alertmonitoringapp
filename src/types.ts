@@ -8,6 +8,12 @@ export enum AssetCategory {
   DEBUG = 'DEBUG',
 }
 
+export interface ChartLayout {
+  id: string;
+  name: string;
+  symbols: string;
+}
+
 export interface TradingAlert {
   id: string;
   symbol: string;

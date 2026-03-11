@@ -14,10 +14,10 @@ import {
   Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { TradingAlert, AssetCategory } from './types';
+import { TradingAlert, AssetCategory, ChartLayout } from './types';
 
 // TradingView Widget Component
-const TradingViewChart = ({ symbol, chartLayoutId }: { symbol: string, chartLayoutId?: string }) => {
+const TradingViewChart = ({ symbol, chartLayouts }: { symbol: string, chartLayouts?: ChartLayout[] }) => {
   const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,15 +47,40 @@ const TradingViewChart = ({ symbol, chartLayoutId }: { symbol: string, chartLayo
           hide_side_toolbar: false,
         };
         
-        if (chartLayoutId) {
-          config.saved_chart = chartLayoutId;
+        // Find matching layout for the current symbol
+        let matchedLayoutId = '';
+        if (chartLayouts && chartLayouts.length > 0) {
+          // First try to find an exact match or partial match in symbols list
+          const match = chartLayouts.find(layout => {
+            if (!layout.symbols || !layout.id) return false;
+            const symbolsList = layout.symbols.split(',')
+              .map(s => s.trim().toUpperCase())
+              .filter(s => s.length > 0 && s !== '*'); // Ignore empty strings and wildcards in this pass
+            
+            // Check if symbol is in the list, or if the list contains a partial match
+            return symbolsList.includes(symbol.toUpperCase()) || symbolsList.some(s => symbol.toUpperCase().includes(s));
+          });
+          
+          if (match) {
+            matchedLayoutId = match.id;
+          } else {
+            // Fallback to a default layout (one with '*' or just the first one if it has no specific symbols)
+            const defaultLayout = chartLayouts.find(l => l.symbols.includes('*') || !l.symbols.trim());
+            if (defaultLayout) {
+              matchedLayoutId = defaultLayout.id;
+            }
+          }
+        }
+
+        if (matchedLayoutId) {
+          config.saved_chart = matchedLayoutId;
         }
 
         new tv.widget(config);
       }
     };
     document.head.appendChild(script);
-  }, [symbol, chartLayoutId]);
+  }, [symbol, chartLayouts]);
 
   return (
     <div className="w-full h-full bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
@@ -71,7 +96,23 @@ export default function App() {
   const [trafficLogs, setTrafficLogs] = useState<any[]>([]);
   const [showTraffic, setShowTraffic] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [chartLayoutId, setChartLayoutId] = useState<string>(localStorage.getItem('tv_chart_id') || '');
+  
+  const [chartLayouts, setChartLayouts] = useState<ChartLayout[]>(() => {
+    const saved = localStorage.getItem('tv_chart_layouts');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    // Migrate old single layout ID if it exists
+    const oldId = localStorage.getItem('tv_chart_id');
+    if (oldId) {
+      return [{ id: oldId, name: 'Default Layout', symbols: '*' }];
+    }
+    return [{ id: '', name: 'Default Layout', symbols: '*' }];
+  });
   const [lastTrafficTime, setLastTrafficTime] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [serverId, setServerId] = useState<string | null>(null);
@@ -389,7 +430,7 @@ export default function App() {
             </div>
             
             <div className="flex-1 min-h-0">
-              <TradingViewChart symbol={selectedSymbol} chartLayoutId={chartLayoutId} />
+              <TradingViewChart symbol={selectedSymbol} chartLayouts={chartLayouts} />
             </div>
 
             {/* Strategy Notes / Alert Details */}
@@ -599,12 +640,12 @@ export default function App() {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-100"
+                className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-2xl border border-gray-100 max-h-[90vh] overflow-y-auto custom-scrollbar"
               >
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                     <Settings className="w-5 h-5 text-emerald-600" />
-                    App Settings
+                    Chart Layouts
                   </h2>
                   <button 
                     onClick={() => setShowSettings(false)}
@@ -615,25 +656,86 @@ export default function App() {
                 </div>
 
                 <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      TradingView Chart Layout ID
-                    </label>
-                    <input 
-                      type="text" 
-                      value={chartLayoutId}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setChartLayoutId(val);
-                        localStorage.setItem('tv_chart_id', val);
-                      }}
-                      placeholder="e.g., abcdefgh"
-                      className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono text-sm"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      To see your custom drawings, enter your saved chart ID. You can find this in the URL of your TradingView chart (e.g., tradingview.com/chart/<strong>ID_HERE</strong>/).
-                    </p>
+                  <p className="text-sm text-gray-600">
+                    Map your TradingView Chart Layout IDs to specific symbols. When an alert arrives, the app will automatically load the correct layout. Use <strong>*</strong> as a wildcard for a default layout.
+                  </p>
+
+                  <div className="space-y-4">
+                    {chartLayouts.map((layout, index) => (
+                      <div key={index} className="p-4 border border-gray-200 rounded-xl bg-gray-50 flex flex-col gap-3 relative">
+                        <button 
+                          onClick={() => {
+                            const newLayouts = chartLayouts.filter((_, i) => i !== index);
+                            setChartLayouts(newLayouts);
+                            localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
+                          }}
+                          className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Layout Name</label>
+                            <input 
+                              type="text" 
+                              value={layout.name}
+                              onChange={(e) => {
+                                const newLayouts = [...chartLayouts];
+                                newLayouts[index].name = e.target.value;
+                                setChartLayouts(newLayouts);
+                                localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
+                              }}
+                              placeholder="e.g., Crypto Layout"
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Layout ID</label>
+                            <input 
+                              type="text" 
+                              value={layout.id}
+                              onChange={(e) => {
+                                const newLayouts = [...chartLayouts];
+                                newLayouts[index].id = e.target.value;
+                                setChartLayouts(newLayouts);
+                                localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
+                              }}
+                              placeholder="e.g., abcdefgh"
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-mono text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Symbols (comma separated)</label>
+                          <input 
+                            type="text" 
+                            value={layout.symbols}
+                            onChange={(e) => {
+                              const newLayouts = [...chartLayouts];
+                              newLayouts[index].symbols = e.target.value;
+                              setChartLayouts(newLayouts);
+                              localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
+                            }}
+                            placeholder="e.g., BTCUSD, ETHUSD, SOLUSD"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
+
+                  <button 
+                    onClick={() => {
+                      const newLayouts = [...chartLayouts, { id: '', name: 'New Layout', symbols: '' }];
+                      setChartLayouts(newLayouts);
+                      localStorage.setItem('tv_chart_layouts', JSON.stringify(newLayouts));
+                    }}
+                    className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-gray-500 font-medium hover:border-emerald-500 hover:text-emerald-600 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add Layout Mapping
+                  </button>
                 </div>
 
                 <div className="mt-8 flex justify-end">
