@@ -77,7 +77,7 @@ const TradingViewChart = ({ symbol, chartLayouts, interval }: { symbol: string, 
         }
 
         if (matchedLayoutId) {
-          config.saved_chart = matchedLayoutId;
+          config.chart = matchedLayoutId;
         }
         
         // If alert provided an interval, use it. Otherwise use the layout's mapped interval.
@@ -473,7 +473,7 @@ export default function App() {
                       const res = await fetch('/api/webhook', {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain' },
-                        body: `${selectedSymbol}|RESEARCH|Manual Test Alert|${(Math.random() * 1000).toFixed(2)}|15`
+                        body: `BINANCE:BTCUSD|RESEARCH|Manual Test Alert|${(Math.random() * 1000).toFixed(2)}|15`
                       });
                       if (res.ok) {
                         console.log('Test alert sent');
@@ -570,10 +570,10 @@ export default function App() {
                         ✓ MUST use the "ais-pre" (Shared) URL above.
                       </p>
                       <p className="text-[9px] text-emerald-600 font-medium">
-                        ✓ JSON: Add <strong>"interval": "{`{{interval}}`}"</strong> to auto-load the correct timeframe.
+                        ✓ JSON: Use <strong>"symbol": "{`{{exchange}}:{{ticker}}`}"</strong>
                       </p>
                       <p className="text-[9px] text-emerald-600 font-medium">
-                        ✓ Plain Text: Use <strong>{`{{ticker}}|SIGNAL|{{strategy.order.action}}|{{close}}|{{interval}}`}</strong>
+                        ✓ Plain Text: Use <strong>{`{{exchange}}:{{ticker}}|SIGNAL|{{strategy.order.action}}|{{close}}|{{interval}}`}</strong>
                       </p>
                     </div>
                   </div>
